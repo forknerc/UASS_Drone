@@ -15,7 +15,7 @@
 
 ///////////////SOCKET INIT
 
-int sockfd,n;
+int sockfd;
 struct sockaddr_in servaddr,cliaddr;
 
 
@@ -88,7 +88,8 @@ int main(int argc, char **argv)
 
   bzero(&servaddr,sizeof(servaddr));
   servaddr.sin_family = AF_INET;
-  servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+  servaddr.sin_addr.s_addr = inet_addr("134.197.41.166");
+  //servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
   servaddr.sin_port = htons(8051);
 
 

@@ -21,3 +21,7 @@ add_executable(sub src/sub.cpp)
 target_link_libraries(sub ${catkin_LIBRARIES})
 add_dependencies(sub UASS_generate_messages_cpp)
 
+add_executable(pub src/pub.cpp)
+target_link_libraries(pub ${catkin_LIBRARIES})
+add_dependencies(pub UASS_generate_messages_cpp)
+
