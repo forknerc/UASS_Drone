@@ -102,17 +102,13 @@ int main(int argc, char **argv)
             // add null char
             buff[recvlen] = 0;
             sprintf(newMsg, "%s", buff);
-            cout<<newMsg<<endl;
+            //cout<<newMsg<<endl;
         }
 
 
-    //cout<<"enter command: ";
-    //getline(cin, in); 
-    //strcpy(in, "c takeoff");
-    //msg.data = in;
-    //std::stringstream ss;
-    //ss << in;
-    //msg.data = ss.str();
+    std::stringstream ss;
+    ss << newMsg << count;
+    msg.data = ss.str();
 
     ROS_INFO("%s", msg.data.c_str());
 

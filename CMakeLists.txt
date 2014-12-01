@@ -25,3 +25,7 @@ add_executable(pub src/pub.cpp)
 target_link_libraries(pub ${catkin_LIBRARIES})
 add_dependencies(pub UASS_generate_messages_cpp)
 
+add_executable(UASSflatTrim src/UASSflatTrim.cpp)
+target_link_libraries(UASSflatTrim ${catkin_LIBRARIES})
+add_dependencies(UASSflatTrim UASS_generate_messages_cpp)
+
