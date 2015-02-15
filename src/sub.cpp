@@ -34,7 +34,7 @@ void chatterCallback(const tum_ardrone::filter_stateConstPtr statePtr)
   // format string for output
   char output[2048];
   output[0] = '\0';
-  sprintf(output, "ID: %s x: %.4f y: %.4f z: %.4f roll: %.4f pitch: %.4f yaw: %.4f\n", 
+  sprintf(output, "3 %s %.4f %.4f %.4f %.4f %.4f %.4f", 
                                                 myID,
                                                 statePtr->x,
                                                 statePtr->z,
