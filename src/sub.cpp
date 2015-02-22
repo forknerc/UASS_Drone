@@ -141,10 +141,7 @@ int main(int argc, char **argv)
   }
 
       printf("My ID: %s\n", myID);
-return 0;
-
-
-
+//return 0;
   // resolve node name
   std::string predPosChannel = n.resolveName("ardrone/predictedPose");
 
@@ -154,7 +151,7 @@ return 0;
 
 
   /*bool keepGoing = true;
-  ros::Rate r(10);
+  ros::Rate r(3);
  while(keepGoing)
     {
         ros::spinOnce();

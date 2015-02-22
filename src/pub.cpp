@@ -3,15 +3,23 @@
 
 #include <iostream>
 #include <string>
+#include <sstream>
+#include <algorithm>
+#include <iterator>
+#include <vector>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+
 using namespace std;
 /**
  * This tutorial demonstrates simple sending of messages over the ROS system.
  */
+
+vector<string> Tokenizer(string str);
+
 int main(int argc, char **argv)
 {
   /**
@@ -61,7 +69,7 @@ int main(int argc, char **argv)
    */
   int count = 0;
   string in;
-  char newMsg[256];
+  char msgCstr[256];
 
   struct sockaddr_in myaddr;
   struct sockaddr_in remaddr;
@@ -101,16 +109,27 @@ int main(int argc, char **argv)
         {
             // add null char
             buff[recvlen] = 0;
-            sprintf(newMsg, "%s", buff);
+            sprintf(msgCstr, "%s", buff);
             //cout<<newMsg<<endl;
         }
 
 
+
+    string stringCpp(msgCstr);
+
+    // parse message
+    istringstream iss(stringCpp);
+    vector<string> tokens = Tokenizer(stringCpp);
+    //ROS_INFO("%s", tokens[3].c_str());
+    ROS_INFO("before");
+    sprintf(msgCstr, "c goto %s %s %s 0", tokens[3].c_str(), tokens[4].c_str(), tokens[5].c_str());
+    ROS_INFO("after");
     std::stringstream ss;
-    ss << newMsg << count;
+    ss << msgCstr << count;
     msg.data = ss.str();
 
     ROS_INFO("%s", msg.data.c_str());
+    ROS_INFO("num tokens: %d", tokens.size());
 
     /**
      * The publish() function is how you send messages. The parameter
@@ -128,4 +147,25 @@ int main(int argc, char **argv)
 
 
   return 0;
+}
+
+vector<string> Tokenizer(string str)
+{
+    vector<string> tokens;
+
+    // Skip delimiters at beginning.
+    string::size_type lastPos = str.find_first_not_of(" ", 0);
+    // Find first "non-delimiter".
+    string::size_type pos = str.find_first_of(" ", lastPos);
+
+    while (string::npos != pos || string::npos != lastPos)
+    {
+        // Found a token, add it to the vector.
+        tokens.push_back(str.substr(lastPos, pos - lastPos));
+        // Skip delimiters.  Note the "not_of"
+        lastPos = str.find_first_not_of(" ", pos);
+        // Find next "non-delimiter"
+        pos = str.find_first_of(" ", lastPos);
+    }
+    return tokens;
 }
