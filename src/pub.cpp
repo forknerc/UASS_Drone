@@ -103,12 +103,14 @@ int main(int argc, char **argv)
      */
     std_msgs::String msg;
 
+    buff[0] = '\0';    
+
     recvlen = recvfrom(fd, buff, 256, 0, (struct sockaddr*)&remaddr, &addrlen);
 
     if(recvlen > 0)
         {
             // add null char
-            buff[recvlen] = 0;
+            buff[recvlen] = '\0';
             sprintf(msgCstr, "%s", buff);
             //cout<<newMsg<<endl;
         }
@@ -123,9 +125,10 @@ int main(int argc, char **argv)
     //ROS_INFO("%s", tokens[3].c_str());
     ROS_INFO("before");
     sprintf(msgCstr, "c goto %s %s %s 0", tokens[3].c_str(), tokens[4].c_str(), tokens[5].c_str());
+
     ROS_INFO("after");
     std::stringstream ss;
-    ss << msgCstr << count;
+    ss << msgCstr;
     msg.data = ss.str();
 
     ROS_INFO("%s", msg.data.c_str());
