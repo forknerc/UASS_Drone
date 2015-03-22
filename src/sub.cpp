@@ -1,17 +1,17 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "tum_ardrone/filter_state.h"
+#include "offsetInfo.h"
 
-#include<cstdio>
-#include<cstdlib>
+#include <cstdio>
+#include <cstdlib>
+#include <vector>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-/**
- * This tutorial demonstrates simple receipt of messages over the ROS system.
- */
+using namespace std;
 
 ///////////////SOCKET INIT
 
@@ -24,26 +24,56 @@ socklen_t addrlen = sizeof(remaddr);
 int recvlen;
 int fd;
 
+UASS::offsetInfo droneOffset;
+UASS::offsetInfo droneCurrent;
+
 //////////////////////////
 
 char myID[256];
+
+vector<string> Tokenizer(string str)
+{
+    vector<string> tokens;
+
+    // Skip delimiters at beginning.
+    string::size_type lastPos = str.find_first_not_of(" ", 0);
+    // Find first "non-delimiter".
+    string::size_type pos = str.find_first_of(" ", lastPos);
+
+    while (string::npos != pos || string::npos != lastPos)
+    {
+        // Found a token, add it to the vector.
+        tokens.push_back(str.substr(lastPos, pos - lastPos));
+        // Skip delimiters.  Note the "not_of"
+        lastPos = str.find_first_not_of(" ", pos);
+        // Find next "non-delimiter"
+        pos = str.find_first_of(" ", lastPos);
+    }
+    return tokens;
+}
 
 void chatterCallback(const tum_ardrone::filter_stateConstPtr statePtr)
 {
 
   // format string for output
   char output[2048];
+
+  droneCurrent.X = statePtr->x;
+  droneCurrent.Y = statePtr->y;
+  droneCurrent.Z = statePtr->z;
+  droneCurrent.Yaw = statePtr->yaw;
+
   output[0] = '\0';
   sprintf(output, "3 %s %.4f %.4f %.4f %.4f %.4f %.4f", 
                                                 myID,
-                                                statePtr->x,
-                                                statePtr->z,
-                                                statePtr->y,
+                                                statePtr->x + droneOffset.X,
+                                                statePtr->z + droneOffset.Z,
+                                                statePtr->y + droneOffset.Y,
                                                 statePtr->roll,
                                                 statePtr->pitch,
-                                                statePtr->yaw);
+                                                statePtr->yaw + droneOffset.Yaw);
   // send output to ros console
-  ROS_INFO(output);
+  //ROS_INFO(output);
 
   // send output to socket
   sendto(sockfd,output,strlen(output),0,
@@ -52,10 +82,35 @@ void chatterCallback(const tum_ardrone::filter_stateConstPtr statePtr)
 
 }
 
+void offsetCallback(const std_msgs::String offsetInfo)
+{
+    string offsetData(offsetInfo.data.c_str());
+
+    vector<string> toks = Tokenizer(offsetData);
+
+    float thisX = atof(toks[0].c_str());
+    float thisY = atof(toks[1].c_str());
+    float thisZ = atof(toks[2].c_str());
+    float thisYaw = atof(toks[3].c_str());
+
+    //             Desired   -  Current
+    droneOffset.X = thisX - droneCurrent.X;
+    droneOffset.Y = thisY - droneCurrent.Y;
+    droneOffset.Z = thisZ - droneCurrent.Z;
+    droneOffset.Yaw = thisYaw - droneCurrent.Yaw;
+
+    ROS_INFO("Received offset: %s", offsetData.c_str());
+}
+ 
 
 
 int main(int argc, char **argv)
 {
+  droneOffset.X = 0.0f;
+  droneOffset.Y = 0.0f;
+  droneOffset.Z = 0.0f;
+  droneOffset.Yaw = 0.0f;
+
 
   int fakeArgc = 1;
   bool stillWaiting = true;
@@ -146,6 +201,7 @@ int main(int argc, char **argv)
   std::string predPosChannel = n.resolveName("ardrone/predictedPose");
 
   ros::Subscriber sub = n.subscribe(predPosChannel, 1000, chatterCallback);
+  ros::Subscriber offset = n.subscribe("UASS_Offset", 1000, offsetCallback);
 
   ros::spin();
 

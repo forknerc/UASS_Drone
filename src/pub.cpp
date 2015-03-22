@@ -1,75 +1,42 @@
 #include "ros/ros.h"
+#include "ros/package.h"
 #include "std_msgs/String.h"
-
+#include "offsetInfo.h"
 #include <iostream>
 #include <string>
 #include <sstream>
 #include <algorithm>
 #include <iterator>
 #include <vector>
-
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-
+ 
 using namespace std;
-/**
- * This tutorial demonstrates simple sending of messages over the ROS system.
- */
 
 vector<string> Tokenizer(string str);
 
+std_msgs::String StringToMsg(string input);
+
 int main(int argc, char **argv)
 {
-  /**
-   * The ros::init() function needs to see argc and argv so that it can perform
-   * any ROS arguments and name remapping that were provided at the command line. For programmatic
-   * remappings you can use a different version of init() which takes remappings
-   * directly, but for most command-line programs, passing argc and argv is the easiest
-   * way to do it.  The third argument to init() is the name of the node.
-   *
-   * You must call one of the versions of ros::init() before using any other
-   * part of the ROS system.
-   */
   ros::init(argc, argv, "pub");
-
-  /**
-   * NodeHandle is the main access point to communications with the ROS system.
-   * The first NodeHandle constructed will fully initialize this node, and the last
-   * NodeHandle destructed will close down the node.
-   */
   ros::NodeHandle n;
-
-  /**
-   * The advertise() function is how you tell ROS that you want to
-   * publish on a given topic name. This invokes a call to the ROS
-   * master node, which keeps a registry of who is publishing and who
-   * is subscribing. After this advertise() call is made, the master
-   * node will notify anyone who is trying to subscribe to this topic name,
-   * and they will in turn negotiate a peer-to-peer connection with this
-   * node.  advertise() returns a Publisher object which allows you to
-   * publish messages on that topic through a call to publish().  Once
-   * all copies of the returned Publisher object are destroyed, the topic
-   * will be automatically unadvertised.
-   *
-   * The second parameter to advertise() is the size of the message queue
-   * used for publishing messages.  If messages are published more quickly
-   * than we can send them, the number here specifies how many messages to
-   * buffer up before throwing some away.
-   */
   std::string predPosChannel = n.resolveName("/tum_ardrone/com");
-  ros::Publisher chatter_pub = n.advertise<std_msgs::String>(predPosChannel, 1000);
-
+  ros::Publisher msg_pub = n.advertise<std_msgs::String>(predPosChannel, 1000);
+  ros::Publisher offset_pub = n.advertise<std_msgs::String>("UASS_Offset", 1000);
   ros::Rate loop_rate(10);
 
-  /**
-   * A count of how many messages we have sent. This is used to create
-   * a unique string for each message.
-   */
   int count = 0;
   string in;
   char msgCstr[256];
+
+  UASS::offsetInfo droneOffset;
+  droneOffset.X = 0.0f;
+  droneOffset.Y = 0.0f;
+  droneOffset.Z = 0.0f;
+  droneOffset.Yaw = 0.0f;
 
   struct sockaddr_in myaddr;
   struct sockaddr_in remaddr;
@@ -96,13 +63,16 @@ int main(int argc, char **argv)
         cerr<<"ERROR BINDING SOCKET"<<endl;
     }
 
-  while (ros::ok() && in[0] != 'q')
-  {
-    /**
-     * This is a message object. You stuff it with data, and then publish it.
-     */
-    std_msgs::String msg;
+  std_msgs::String msg;
+  std_msgs::String msgOffset;
 
+  std::stringstream ss1;
+  ss1 << "0 0 0 0";
+  msgOffset.data = ss1.str();
+
+
+  while (ros::ok())
+  {
     buff[0] = '\0';    
 
     recvlen = recvfrom(fd, buff, 256, 0, (struct sockaddr*)&remaddr, &addrlen);
@@ -115,35 +85,91 @@ int main(int argc, char **argv)
             //cout<<newMsg<<endl;
         }
 
-
-
     string stringCpp(msgCstr);
 
     // parse message
     istringstream iss(stringCpp);
     vector<string> tokens = Tokenizer(stringCpp);
-    //ROS_INFO("%s", tokens[3].c_str());
-    ROS_INFO("before");
-    sprintf(msgCstr, "c goto %s %s %s 0", tokens[3].c_str(), tokens[4].c_str(), tokens[5].c_str());
-
-    ROS_INFO("after");
-    std::stringstream ss;
-    ss << msgCstr;
-    msg.data = ss.str();
-
-    ROS_INFO("%s", msg.data.c_str());
+    ROS_INFO("Msg received: %s", msgCstr);
     ROS_INFO("num tokens: %d", tokens.size());
 
-    /**
-     * The publish() function is how you send messages. The parameter
-     * is the message object. The type of this object must agree with the type
-     * given as a template parameter to the advertise<>() call, as was done
-     * in the constructor above.
-     */
-    chatter_pub.publish(msg);
+    int cmdType = atoi(tokens[2].c_str());
+    int msgType = atoi(tokens[0].c_str());
+    bool sendMsg = false;
+    msgCstr[0] = '\0';
 
+    if(msgType == 2)
+    {
+        switch(cmdType)
+        {
+            case 0:
+                if(tokens.size() == 6)
+                {
+                    sprintf(msgCstr, "c goto %s %s %s 0", tokens[3].c_str(), 
+                                                           tokens[5].c_str(), 
+                                                           tokens[4].c_str());
+                msg = StringToMsg(msgCstr);
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+                }
+                break;
+            case 1:
+                // stop
+                msg = StringToMsg("c clearCommands");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+                break;
+            case 2:
+                // launch
+                msg = StringToMsg("c clearCommands");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+
+                msg = StringToMsg("c autoInit 500 800 4000 0.5");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+
+                msg = StringToMsg("c setInitialReachDist 0.2");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+
+                msg = StringToMsg("c setStayWithinDist 0.3");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+
+                msg = StringToMsg("c setStayTime 3");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+
+                msg = StringToMsg("c lockScaleFP");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+                break;
+            case 3:
+                // land
+                msg = StringToMsg("c land");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+                break;
+            case 4:
+                // change offset
+                droneOffset.X = atof(tokens[3].c_str());
+                droneOffset.Y = atof(tokens[5].c_str());
+                droneOffset.Z = atof(tokens[4].c_str());
+                droneOffset.Yaw = atof(tokens[6].c_str());
+                char temp[256];
+                sprintf(temp, "%f %f %f %f", droneOffset.X, 
+                                             droneOffset.Y,
+                                             droneOffset.Z,
+                                             droneOffset.Yaw);
+                std::stringstream tempStream;
+                tempStream << temp;
+                msgOffset.data = tempStream.str();
+                offset_pub.publish(msgOffset);
+                break;
+        }
+    }
     ros::spinOnce();
-
     loop_rate.sleep();
     ++count;
   }
@@ -172,3 +198,14 @@ vector<string> Tokenizer(string str)
     }
     return tokens;
 }
+
+std_msgs::String StringToMsg(string input)
+{
+    std_msgs::String out;
+    std::stringstream ss;
+    ss << input;
+    out.data = ss.str();
+    return out;
+}
+
+
