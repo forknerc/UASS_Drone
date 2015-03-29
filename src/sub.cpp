@@ -174,6 +174,7 @@ int main(int argc, char **argv)
   // wait for client to send back unit ID
   while(stillWaiting)
   {
+      printf("#waiting bro\n");
       recvlen = recvfrom(fd, buffer, 256, 0, (struct
                           sockaddr*)&remaddr, &addrlen);
       buffer[recvlen] = '\0';

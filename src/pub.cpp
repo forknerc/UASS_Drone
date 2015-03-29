@@ -105,9 +105,13 @@ int main(int argc, char **argv)
             case 0:
                 if(tokens.size() == 6)
                 {
-                    sprintf(msgCstr, "c goto %s %s %s 0", tokens[3].c_str(), 
-                                                           tokens[5].c_str(), 
-                                                           tokens[4].c_str());
+                    double newX = atof(tokens[3].c_str()) - droneOffset.X;
+                    double newY = atof(tokens[5].c_str()) - droneOffset.Y;
+                    double newZ = atof(tokens[4].c_str()) - droneOffset.Z;
+
+                    sprintf(msgCstr, "c goto %.3f %.3f %.3f 0", newX, 
+                                                                newY, 
+                                                                newZ);
                 msg = StringToMsg(msgCstr);
                 ROS_INFO("Send msg: %s", msg.data.c_str());
                 msg_pub.publish(msg);
@@ -147,6 +151,10 @@ int main(int argc, char **argv)
                 break;
             case 3:
                 // land
+                msg = StringToMsg("c clearCommands");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+
                 msg = StringToMsg("c land");
                 ROS_INFO("Send msg: %s", msg.data.c_str());
                 msg_pub.publish(msg);
