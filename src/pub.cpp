@@ -73,6 +73,8 @@ int main(int argc, char **argv)
 
   while (ros::ok())
   {
+    bool isEmergency = false;
+
     buff[0] = '\0';    
 
     recvlen = recvfrom(fd, buff, 256, 0, (struct sockaddr*)&remaddr, &addrlen);
@@ -100,10 +102,12 @@ int main(int argc, char **argv)
 
     if(msgType == 2)
     {
+        msg.data = "";
+
         switch(cmdType)
         {
             case 0:
-                if(tokens.size() == 6)
+                if(tokens.size() == 6 && !isEmergency)
                 {
                     double newX = atof(tokens[3].c_str()) - droneOffset.X;
                     double newY = atof(tokens[5].c_str()) - droneOffset.Y;
@@ -125,39 +129,44 @@ int main(int argc, char **argv)
                 break;
             case 2:
                 // launch
-                msg = StringToMsg("c clearCommands");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
+                if(!isEmergency)
+                {
+                    msg = StringToMsg("c clearCommands");
+                    ROS_INFO("Send msg: %s", msg.data.c_str());
+                    msg_pub.publish(msg);
 
-                msg = StringToMsg("c autoInit 500 800 4000 0.5");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
+                    msg = StringToMsg("c autoInit 500 800 4000 0.5");
+                    ROS_INFO("Send msg: %s", msg.data.c_str());
+                    msg_pub.publish(msg);
 
-                msg = StringToMsg("c setInitialReachDist 0.2");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
+                    msg = StringToMsg("c setInitialReachDist 0.2");
+                    ROS_INFO("Send msg: %s", msg.data.c_str());
+                    msg_pub.publish(msg);
 
-                msg = StringToMsg("c setStayWithinDist 0.3");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
+                    msg = StringToMsg("c setStayWithinDist 0.3");
+                    ROS_INFO("Send msg: %s", msg.data.c_str());
+                    msg_pub.publish(msg);
 
-                msg = StringToMsg("c setStayTime 3");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
+                    msg = StringToMsg("c setStayTime 3");
+                    ROS_INFO("Send msg: %s", msg.data.c_str());
+                    msg_pub.publish(msg);
 
-                msg = StringToMsg("c lockScaleFP");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
+                    msg = StringToMsg("c lockScaleFP");
+                    ROS_INFO("Send msg: %s", msg.data.c_str());
+                    msg_pub.publish(msg);
+                }
                 break;
             case 3:
                 // land
-                msg = StringToMsg("c clearCommands");
+                /*msg = StringToMsg("c clearCommands");
                 ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
-
-                msg = StringToMsg("c land");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
+                msg_pub.publish(msg);*/
+                if(!isEmergency)
+                {
+                    msg = StringToMsg("c land");
+                    ROS_INFO("Send msg: %s", msg.data.c_str());
+                    msg_pub.publish(msg);
+                }
                 break;
             case 4:
                 // change offset
@@ -170,10 +179,63 @@ int main(int argc, char **argv)
                                              droneOffset.Y,
                                              droneOffset.Z,
                                              droneOffset.Yaw);
-                std::stringstream tempStream;
-                tempStream << temp;
-                msgOffset.data = tempStream.str();
+                msgOffset = StringToMsg(temp);
                 offset_pub.publish(msgOffset);
+                break;
+            case 5:
+                /*int direction = atoi(tokens[3].c_str());
+                float newX = 0;
+                float newY = 0;
+                switch(direction)
+                {
+                    case 1:
+                        newX = -0.353;
+                        newY = 0.353;
+                        break;
+                    case 2:
+                        newY = 0.5;
+                        break;
+                    case 3:
+                        newX = 0.353;
+                        newY = 0.353;
+                        break;
+                    case 4:
+                        newX = 0.5;
+                        break;
+                    case 5:
+                        newX = 0.353;
+                        newY = -0.353;
+                        break;
+                    case 6:
+                        newY = -0.5;
+                        break;
+                    case 7:
+                        newX = -0.353;
+                        newY = -0.353;
+                        break;
+                    case 8:
+                        newX = -0.5;
+                        break;
+                    default:
+                        break;
+                }
+                sprintf(msgCstr, "c goto %.3f %.3f %.3f 0", );
+                msg = StringToMsg(msgCstr);*/
+                break;
+            case 6: // emergency stop
+                isEmergency = true;
+                ROS_INFO("Recieved Emegrency, shutting down");
+                msg = StringToMsg("c clearCommands");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+
+                msg = StringToMsg("c land");
+                ROS_INFO("Send msg: %s", msg.data.c_str());
+                msg_pub.publish(msg);
+                break;
+            case 7: // emergency end
+                ROS_INFO("Recieved Emegrency end, starting up");
+                isEmergency = false;
                 break;
         }
     }
