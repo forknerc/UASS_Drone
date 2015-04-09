@@ -119,6 +119,7 @@ int main(int argc, char **argv)
 
         float anewX = 0.0;
         float anewY = 0.0;
+        float anewZ = 0.0;
         geometry_msgs::Twist newTwist;
         int direction;
 
@@ -144,6 +145,7 @@ int main(int argc, char **argv)
                 }
                 break;
             case 1:
+                UASS_SetKB.publish(std_msgs::Empty());
                 // stop
                 newTwist.linear.x = 0.0;
                 newTwist.linear.y = 0.0;
@@ -228,41 +230,59 @@ int main(int argc, char **argv)
                     case 1:
                         anewX = 0.353;
                         anewY = 0.353;
+                        anewZ = 0.0;
                         break;
                     case 2:
                         anewX = 0.5;
                         anewY = 0.0;
+                        anewZ = 0.0;
                         break;
                     case 3:
                         anewX = 0.353;
                         anewY = -0.353;
+                        anewZ = 0.0;
                         break;
                     case 4:
                         anewX = 0.0;
                         anewY = -0.5;
+                        anewZ = 0.0;
                         break;
                     case 5:
                         anewX = -0.353;
                         anewY = -0.353;
+                        anewZ = 0.0;
                         break;
                     case 6:
                         anewX = -0.5;
                         anewY = 0.0;
+                        anewZ = 0.0;
                         break;
                     case 7:
                         anewX = -0.353;
                         anewY = 0.353;
+                        anewZ = 0.0;
                         break;
                     case 8:
                         anewX = 0.0;
                         anewY = 0.5;
+                        anewZ = 0.0;
+                        break;
+                    case 9:
+                        anewX = 0.0;
+                        anewY = 0.0;
+                        anewZ = 0.5;
+                        break;
+                    case 10:
+                        anewX = 0.0;
+                        anewY = 0.0;
+                        anewZ = -0.5;
                         break;
                     default:
                         break;
                 }
                 newTwist.linear.x = anewX;
                 newTwist.linear.y = anewY;
-                newTwist.linear.z = 0.0;
+                newTwist.linear.z = anewZ;
                 newTwist.angular.x = 0.0;
                 newTwist.angular.y = 0.0;
                 newTwist.angular.z = 0.0;
