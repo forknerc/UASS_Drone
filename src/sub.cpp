@@ -235,17 +235,17 @@ int main(int argc, char **argv)
 
 
 
-  ros::spin();
+  //ros::spin();
 
 
-  /*bool keepGoing = true;
-  ros::Rate r(3);
+  bool keepGoing = true;
+  ros::Rate r(100);
  while(keepGoing)
     {
         ros::spinOnce();
         // send message over socket
         r.sleep();
-    }*/
+    }
 
   return 0;
 }
