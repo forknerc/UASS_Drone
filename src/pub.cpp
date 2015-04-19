@@ -181,7 +181,7 @@ int main(int argc, char **argv)
                     ROS_INFO("Send msg: %s", msg.data.c_str());
                     msg_pub.publish(msg);
 
-                    msg = StringToMsg("c autoInit 500 800 4000 0.3");
+                    msg = StringToMsg("c autoInit 500 800 4000 0.5");
                     ROS_INFO("Send msg: %s", msg.data.c_str());
                     msg_pub.publish(msg);
 
