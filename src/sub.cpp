@@ -213,7 +213,7 @@ int main(int argc, char **argv)
 
 
   bool keepGoing = true;
-  ros::Rate r(100);
+  ros::Rate r(1000);
  while(keepGoing)
     {
         ros::spinOnce();

@@ -18,6 +18,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <cstdlib>
+#include <pthread.h>
  
 using namespace std;
 
@@ -27,10 +28,35 @@ std_msgs::String StringToMsg(string input);
 
 void updatePosition(const tum_ardrone::filter_stateConstPtr statePtr);
 
+void *NetworkThread(void *arg);
+
 float posZ;
+
+char msgCstr[256];
+
+bool newMsgFlag;
+
+pthread_mutex_t lock;
 
 int main(int argc, char **argv)
 {
+  pthread_t tid;
+
+  int err = pthread_create(&tid, NULL, &NetworkThread, NULL);
+
+  if(err != 0)
+    {
+        ROS_INFO("CANNOT MAKE THREAD, EXITING");
+        return -1;
+    }
+
+  if(pthread_mutex_init(&lock, NULL) != 0)
+    {
+        ROS_INFO("CANNOT MAKE LOCK, EXITING");
+        return -1;
+    }
+
+  newMsgFlag = false;
   posZ = 0;
 
   ros::init(argc, argv, "pub");
@@ -53,7 +79,6 @@ int main(int argc, char **argv)
 
   int count = 0;
   string in;
-  char msgCstr[256];
 
   UASS::offsetInfo droneOffset;
   droneOffset.X = 0.0f;
@@ -61,275 +86,250 @@ int main(int argc, char **argv)
   droneOffset.Z = 0.0f;
   droneOffset.Yaw = 0.0f;
 
-  struct sockaddr_in myaddr;
-  struct sockaddr_in remaddr;
-  socklen_t addrlen = sizeof(remaddr);
-  int recvlen;
-  int fd;
-  unsigned char buff[256];
-
-  // init socket
-  if((fd = socket(AF_INET,SOCK_DGRAM,0)) < 0)
-    {
-        cerr<<"ERROR CREATING SOCKET"<<endl;
-        return 0;
-    }
-
-  // bind socket to read port 8052
-  memset((char*)&myaddr,0,sizeof(myaddr));
-  myaddr.sin_family = AF_INET;
-  myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  myaddr.sin_port = htons(8052);
-
-  if(bind(fd, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
-    {
-        cerr<<"ERROR BINDING SOCKET"<<endl;
-    }
-
   std_msgs::String msg;
   std_msgs::String msgOffset;
 
   std::stringstream ss1;
   ss1 << "0 0 0 0";
   msgOffset.data = ss1.str();
-
-
+  bool isEmergency = false;
+  bool timeToROS;
   while (ros::ok())
   {
-    bool isEmergency = false;
+    pthread_mutex_lock(&lock);
 
-    buff[0] = '\0';    
-
-    recvlen = recvfrom(fd, buff, 256, 0, (struct sockaddr*)&remaddr, &addrlen);
-
-    if(recvlen > 0)
-        {
-            // add null char
-            buff[recvlen] = '\0';
-            sprintf(msgCstr, "%s", buff);
-            //cout<<newMsg<<endl;
-        }
-
-    string stringCpp(msgCstr);
-
-    // parse message
-    istringstream iss(stringCpp);
-    vector<string> tokens = Tokenizer(stringCpp);
-    ROS_INFO("Msg received: %s", msgCstr);
-    ROS_INFO("num tokens: %d", tokens.size());
-
-    int cmdType = atoi(tokens[2].c_str());
-    int msgType = atoi(tokens[0].c_str());
-    bool sendMsg = false;
-    msgCstr[0] = '\0';
-
-    if(msgType == 2)
+    if(newMsgFlag)
     {
-        msg.data = "";
+        newMsgFlag = false;
 
-        float anewX = 0.0;
-        float anewY = 0.0;
-        float anewZ = 0.0;
-        geometry_msgs::Twist newTwist;
-        int direction;
+        string stringCpp(msgCstr);
 
-        switch(cmdType)
+        // parse message
+        vector<string> tokens = Tokenizer(stringCpp);
+        ROS_INFO("Msg received: %s", msgCstr);
+
+        pthread_mutex_unlock(&lock);
+
+        ROS_INFO("Msg received (string): %s", stringCpp.c_str());
+        ROS_INFO("num tokens: %d", tokens.size());
+
+        int cmdType = atoi(tokens[2].c_str());
+        int msgType = atoi(tokens[0].c_str());
+        bool sendMsg = false;
+
+        if(msgType == 2)
         {
-            case 0:
-                // goto
-                if(tokens.size() == 6 && !isEmergency)
-                {
-                    UASS_SetAI.publish(std_msgs::Empty());
+            msg.data = "";
 
-                    double newX = atof(tokens[3].c_str());
-                    double newY = atof(tokens[5].c_str());
-                    double newZ = posZ;
+            float anewX = 0.0;
+            float anewY = 0.0;
+            float anewZ = 0.0;
+            geometry_msgs::Twist newTwist;
+            int direction;
 
-                    // find direction the drone needs to move
+            switch(cmdType)
+            {
+                case 0:
+                    // goto
+                    if(tokens.size() == 6 && !isEmergency)
+                    {
+                        UASS_SetAI.publish(std_msgs::Empty());
 
-                    sprintf(msgCstr, "c goto %.3f %.3f %.3f 0", newX, 
-                                                                newY, 
-                                                                newZ);
-                    msg = StringToMsg(msgCstr);
-                    ROS_INFO("Send msg: %s", msg.data.c_str());
-                    msg_pub.publish(msg);
-                }
-                break;
-            case 1:
-                UASS_SetKB.publish(std_msgs::Empty());
-                // stop
-                newTwist.linear.x = 0.0;
-                newTwist.linear.y = 0.0;
-                newTwist.linear.z = 0.0;
-                newTwist.angular.x = 0.0;
-                newTwist.angular.y = 0.0;
-                newTwist.angular.z = 0.0;
-                autonomy_move.publish(newTwist);
+                        double newX = atof(tokens[3].c_str());
+                        double newY = atof(tokens[5].c_str());
+                        double newZ = posZ;
 
-                msg = StringToMsg("c clearCommands");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
-                break;
-            case 2:
-                // launch
-                if(!isEmergency)
-                {
-                    UASS_SetAI.publish(std_msgs::Empty());
-                    //autonomy_takeoff.publish(std_msgs::Empty());
+                        // find direction the drone needs to move
+
+                        sprintf(msgCstr, "c goto %.3f %.3f %.3f 0", newX, 
+                                                                    newY, 
+                                                                    newZ);
+                        msg = StringToMsg(msgCstr);
+                        ROS_INFO("Send msg: %s", msg.data.c_str());
+                        msg_pub.publish(msg);
+                    }
+                    break;
+                case 1:
+                    UASS_SetKB.publish(std_msgs::Empty());
+                    // stop
+                    newTwist.linear.x = 0.0;
+                    newTwist.linear.y = 0.0;
+                    newTwist.linear.z = 0.0;
+                    newTwist.angular.x = 0.0;
+                    newTwist.angular.y = 0.0;
+                    newTwist.angular.z = 0.0;
+                    autonomy_move.publish(newTwist);
 
                     msg = StringToMsg("c clearCommands");
                     ROS_INFO("Send msg: %s", msg.data.c_str());
                     msg_pub.publish(msg);
+                    break;
+                case 2:
+                    // launch
+                    if(!isEmergency)
+                    {
+                        UASS_SetAI.publish(std_msgs::Empty());
+                        //autonomy_takeoff.publish(std_msgs::Empty());
 
-                    msg = StringToMsg("c autoInit 500 800 4000 0.5");
-                    ROS_INFO("Send msg: %s", msg.data.c_str());
-                    msg_pub.publish(msg);
+                        msg = StringToMsg("c clearCommands");
+                        ROS_INFO("Send msg: %s", msg.data.c_str());
+                        msg_pub.publish(msg);
 
-                    msg = StringToMsg("c setInitialReachDist 0.2");
-                    ROS_INFO("Send msg: %s", msg.data.c_str());
-                    msg_pub.publish(msg);
+                        msg = StringToMsg("c autoInit 500 800 4000 0.5");
+                        ROS_INFO("Send msg: %s", msg.data.c_str());
+                        msg_pub.publish(msg);
 
-                    msg = StringToMsg("c setStayWithinDist 0.3");
-                    ROS_INFO("Send msg: %s", msg.data.c_str());
-                    msg_pub.publish(msg);
+                        msg = StringToMsg("c setInitialReachDist 0.2");
+                        ROS_INFO("Send msg: %s", msg.data.c_str());
+                        msg_pub.publish(msg);
 
-                    msg = StringToMsg("c setStayTime 2");
-                    ROS_INFO("Send msg: %s", msg.data.c_str());
-                    msg_pub.publish(msg);
+                        msg = StringToMsg("c setStayWithinDist 0.3");
+                        ROS_INFO("Send msg: %s", msg.data.c_str());
+                        msg_pub.publish(msg);
 
-                    msg = StringToMsg("c lockScaleFP");
+                        msg = StringToMsg("c setStayTime 2");
+                        ROS_INFO("Send msg: %s", msg.data.c_str());
+                        msg_pub.publish(msg);
+
+                        msg = StringToMsg("c lockScaleFP");
+                        ROS_INFO("Send msg: %s", msg.data.c_str());
+                        msg_pub.publish(msg);
+                    }
+                    break;
+                case 3:
+                    // land
+                    /*msg = StringToMsg("c clearCommands");
                     ROS_INFO("Send msg: %s", msg.data.c_str());
-                    msg_pub.publish(msg);
-                }
-                break;
-            case 3:
-                // land
-                /*msg = StringToMsg("c clearCommands");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);*/
-                //if(!isEmergency)
-                //{
-                    UASS_SetAI.publish(std_msgs::Empty());
+                    msg_pub.publish(msg);*/
+                    //if(!isEmergency)
+                    //{
+                        UASS_SetAI.publish(std_msgs::Empty());
+                        //autonomy_land.publish(std_msgs::Empty());
+                
+                        msg = StringToMsg("c land");
+                        ROS_INFO("Send msg: %s", msg.data.c_str());
+                        msg_pub.publish(msg);
+                    //}
+                    break;
+                case 4:
+                    // change offset
+                    droneOffset.X = atof(tokens[3].c_str());
+                    droneOffset.Y = atof(tokens[5].c_str());
+                    droneOffset.Z = atof(tokens[4].c_str());
+                    droneOffset.Yaw = atof(tokens[6].c_str());
+                    char temp[256];
+                    sprintf(temp, "%f %f %f %f", droneOffset.X, 
+                                                 droneOffset.Y,
+                                                 droneOffset.Z,
+                                                 droneOffset.Yaw);
+                    msgOffset = StringToMsg(temp);
+                    offset_pub.publish(msgOffset);
+                    break;
+                case 5:
+                    UASS_SetKB.publish(std_msgs::Empty());
+
+                    direction = atoi(tokens[3].c_str());
+
+                    switch(direction)
+                    {
+                        case 1:
+                            anewX = 0.353;
+                            anewY = 0.353;
+                            anewZ = 0.0;
+                            break;
+                        case 2:
+                            anewX = 0.5;
+                            anewY = 0.0;
+                            anewZ = 0.0;
+                            break;
+                        case 3:
+                            anewX = 0.353;
+                            anewY = -0.353;
+                            anewZ = 0.0;
+                            break;
+                        case 4:
+                            anewX = 0.0;
+                            anewY = -0.5;
+                            anewZ = 0.0;
+                            break;
+                        case 5:
+                            anewX = -0.353;
+                            anewY = -0.353;
+                            anewZ = 0.0;
+                            break;
+                        case 6:
+                            anewX = -0.5;
+                            anewY = 0.0;
+                            anewZ = 0.0;
+                            break;
+                        case 7:
+                            anewX = -0.353;
+                            anewY = 0.353;
+                            anewZ = 0.0;
+                            break;
+                        case 8:
+                            anewX = 0.0;
+                            anewY = 0.5;
+                            anewZ = 0.0;
+                            break;
+                        case 9:
+                            anewX = 0.0;
+                            anewY = 0.0;
+                            anewZ = 0.5;
+                            break;
+                        case 10:
+                            anewX = 0.0;
+                            anewY = 0.0;
+                            anewZ = -0.5;
+                            break;
+                        default:
+                            break;
+                    }
+                    newTwist.linear.x = anewX;
+                    newTwist.linear.y = anewY;
+                    newTwist.linear.z = anewZ;
+                    newTwist.angular.x = 0.0;
+                    newTwist.angular.y = 0.0;
+                    newTwist.angular.z = 0.0;
+                    
+                    autonomy_move.publish(newTwist);
+                    break;
+
+                case 6: // emergency stop
+                    isEmergency = true;
                     //autonomy_land.publish(std_msgs::Empty());
-            
+
+                    ROS_INFO("Recieved Emegrency, shutting down");
+                    msg = StringToMsg("c clearCommands");
+                    ROS_INFO("Send msg: %s", msg.data.c_str());
+                    msg_pub.publish(msg);
+
                     msg = StringToMsg("c land");
                     ROS_INFO("Send msg: %s", msg.data.c_str());
                     msg_pub.publish(msg);
-                //}
-                break;
-            case 4:
-                // change offset
-                droneOffset.X = atof(tokens[3].c_str());
-                droneOffset.Y = atof(tokens[5].c_str());
-                droneOffset.Z = atof(tokens[4].c_str());
-                droneOffset.Yaw = atof(tokens[6].c_str());
-                char temp[256];
-                sprintf(temp, "%f %f %f %f", droneOffset.X, 
-                                             droneOffset.Y,
-                                             droneOffset.Z,
-                                             droneOffset.Yaw);
-                msgOffset = StringToMsg(temp);
-                offset_pub.publish(msgOffset);
-                break;
-            case 5:
-                UASS_SetKB.publish(std_msgs::Empty());
-
-                direction = atoi(tokens[3].c_str());
-
-                switch(direction)
-                {
-                    case 1:
-                        anewX = 0.353;
-                        anewY = 0.353;
-                        anewZ = 0.0;
-                        break;
-                    case 2:
-                        anewX = 0.5;
-                        anewY = 0.0;
-                        anewZ = 0.0;
-                        break;
-                    case 3:
-                        anewX = 0.353;
-                        anewY = -0.353;
-                        anewZ = 0.0;
-                        break;
-                    case 4:
-                        anewX = 0.0;
-                        anewY = -0.5;
-                        anewZ = 0.0;
-                        break;
-                    case 5:
-                        anewX = -0.353;
-                        anewY = -0.353;
-                        anewZ = 0.0;
-                        break;
-                    case 6:
-                        anewX = -0.5;
-                        anewY = 0.0;
-                        anewZ = 0.0;
-                        break;
-                    case 7:
-                        anewX = -0.353;
-                        anewY = 0.353;
-                        anewZ = 0.0;
-                        break;
-                    case 8:
-                        anewX = 0.0;
-                        anewY = 0.5;
-                        anewZ = 0.0;
-                        break;
-                    case 9:
-                        anewX = 0.0;
-                        anewY = 0.0;
-                        anewZ = 0.5;
-                        break;
-                    case 10:
-                        anewX = 0.0;
-                        anewY = 0.0;
-                        anewZ = -0.5;
-                        break;
-                    default:
-                        break;
-                }
-                newTwist.linear.x = anewX;
-                newTwist.linear.y = anewY;
-                newTwist.linear.z = anewZ;
-                newTwist.angular.x = 0.0;
-                newTwist.angular.y = 0.0;
-                newTwist.angular.z = 0.0;
-                
-                autonomy_move.publish(newTwist);
-                break;
-
-            case 6: // emergency stop
-                isEmergency = true;
-                //autonomy_land.publish(std_msgs::Empty());
-
-                ROS_INFO("Recieved Emegrency, shutting down");
-                msg = StringToMsg("c clearCommands");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
-
-                msg = StringToMsg("c land");
-                ROS_INFO("Send msg: %s", msg.data.c_str());
-                msg_pub.publish(msg);
-                
-                break;
-            case 7: // emergency end
-                ROS_INFO("Recieved Emegrency end, starting up");
-                isEmergency = false;
-                break;
-            case 8: // DO A BARREL ROLL!
-                system("rosservice call /ardrone/setflightanimation 18 0");
-                break;
+                    
+                    break;
+                case 7: // emergency end
+                    ROS_INFO("Recieved Emegrency end, starting up");
+                    isEmergency = false;
+                    break;
+                case 8: // DO A BARREL ROLL!
+                    system("rosservice call /ardrone/setflightanimation 18 0");
+                    break;
+            }
         }
     }
+    else
+    {
+        pthread_mutex_unlock(&lock);
+    }
+
     ros::spinOnce();
     loop_rate.sleep();
     ++count;
   }
 
-
+  pthread_join(tid, NULL);
   return 0;
 }
 
@@ -366,6 +366,67 @@ std_msgs::String StringToMsg(string input)
 void updatePosition(const tum_ardrone::filter_stateConstPtr statePtr)
 {
     posZ = statePtr->z;
+    //ROS_INFO("NEW Z: %f", posZ);
 }
+
+void *NetworkThread(void *arg)
+{
+    struct sockaddr_in myaddr;
+    struct sockaddr_in remaddr;
+    socklen_t addrlen = sizeof(remaddr);
+    int recvlen;
+    int fd;
+    unsigned char buff[256];
+
+    // init socket
+    if((fd = socket(AF_INET,SOCK_DGRAM,0)) < 0)
+    {
+        cerr<<"ERROR CREATING SOCKET"<<endl;
+        return 0;
+    }
+
+    // bind socket to read port 8052
+    memset((char*)&myaddr,0,sizeof(myaddr));
+    myaddr.sin_family = AF_INET;
+    myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    myaddr.sin_port = htons(8052);
+
+    if(bind(fd, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0)
+    {
+        cerr<<"ERROR BINDING SOCKET"<<endl;
+    }
+
+    while(true)
+    {
+        buff[0] = '\0';    
+
+        recvlen = recvfrom(fd, buff, 256, 0, (struct sockaddr*)&remaddr, &addrlen);
+
+        if(recvlen > 0)
+        {
+            /////////////////////// MUTEX START
+            pthread_mutex_lock(&lock);
+
+            newMsgFlag = true;
+            buff[recvlen] = '\0';
+            sprintf(msgCstr, "%s", buff);
+            ROS_INFO("buff: %s", buff);
+            ROS_INFO("msgCstr: %s", msgCstr);
+
+            /////////////////////// MUTEX END
+            pthread_mutex_unlock(&lock);
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
 
 
