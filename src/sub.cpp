@@ -67,12 +67,12 @@ void chatterCallback(const tum_ardrone::filter_stateConstPtr statePtr)
   output[0] = '\0';
   sprintf(output, "3 %s %.4f %.4f %.4f %.4f %.4f %.4f", 
                                                 myID,
-                                                statePtr->x + droneOffset.X,
-                                                statePtr->z + droneOffset.Z,
-                                                statePtr->y + droneOffset.Y,
+                                                statePtr->x,
+                                                statePtr->z,
+                                                statePtr->y,
                                                 statePtr->roll,
                                                 statePtr->pitch,
-                                                statePtr->yaw + droneOffset.Yaw);
+                                                statePtr->yaw);
   // send output to ros console
   //ROS_INFO(output);
 
@@ -83,31 +83,6 @@ void chatterCallback(const tum_ardrone::filter_stateConstPtr statePtr)
 
 }
 
-/*void odomCallback(const nav_msgs::Odometry odom)
-{
-    ROS_INFO("ODOM POSE: X: %.2f Y: %.2f Z: %.2f", odom.pose.pose.position.x, 
-                                                   odom.pose.pose.position.y, 
-                                                   odom.pose.pose.position.z);
-    ROS_INFO("ODOM QUAT: W: %.2f X: %.2f Y: %.2f Z: %.2f", odom.pose.pose.orientation.w, 
-                                                           odom.pose.pose.orientation.x, 
-                                                           odom.pose.pose.orientation.y, 
-                                                           odom.pose.pose.orientation.z);
-
-    char output[2048];
-    output[0] = 0;
-
-    sprintf(output, "3 %s %.4f %.4f %.4f %.4f %.4f %.4f", 
-                                                myID,
-                                                odom.pose.pose.position.y + droneOffset.X,
-                                                odom.pose.pose.position.z + droneOffset.Z,
-                                                odom.pose.pose.position.x + droneOffset.Y,
-                                                0.0,
-                                                0.0,
-                                                droneOffset.Yaw);
-
-    sendto(sockfd,output,strlen(output),0,
-                 (struct sockaddr *)&servaddr,sizeof(servaddr));
-}*/
 
 void offsetCallback(const std_msgs::String offsetInfo)
 {
@@ -227,7 +202,6 @@ int main(int argc, char **argv)
 //return 0;
   // resolve node name
   std::string predPosChannel = n.resolveName("ardrone/predictedPose");
-
   ros::Subscriber sub = n.subscribe(predPosChannel, 1000, chatterCallback);
   ros::Subscriber offset = n.subscribe("UASS_Offset", 1000, offsetCallback);
 

@@ -6,6 +6,7 @@
 #include "std_msgs/Empty.h"
 #include <geometry_msgs/Twist.h>
 #include "offsetInfo.h"
+#include "tum_ardrone/filter_state.h"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -24,8 +25,14 @@ vector<string> Tokenizer(string str);
 
 std_msgs::String StringToMsg(string input);
 
+void updatePosition(const tum_ardrone::filter_stateConstPtr statePtr);
+
+float posZ;
+
 int main(int argc, char **argv)
 {
+  posZ = 0;
+
   ros::init(argc, argv, "pub");
   ros::NodeHandle n;
   std::string comChannel = n.resolveName("/tum_ardrone/com");
@@ -39,7 +46,10 @@ int main(int argc, char **argv)
   ros::Publisher autonomy_takeoff = n.advertise<std_msgs::Empty>("ardrone/takeoff",1000);
   ros::Publisher autonomy_land = n.advertise<std_msgs::Empty>("ardrone/land",1000);
 
-  ros::Rate loop_rate(10);
+  std::string predPosChannel = n.resolveName("ardrone/predictedPose");
+  ros::Subscriber sub = n.subscribe(predPosChannel, 1000, updatePosition);
+
+  ros::Rate loop_rate(1000);
 
   int count = 0;
   string in;
@@ -126,13 +136,14 @@ int main(int argc, char **argv)
         switch(cmdType)
         {
             case 0:
+                // goto
                 if(tokens.size() == 6 && !isEmergency)
                 {
                     UASS_SetAI.publish(std_msgs::Empty());
 
-                    double newX = atof(tokens[3].c_str()) - droneOffset.X;
-                    double newY = atof(tokens[5].c_str()) - droneOffset.Y;
-                    double newZ = atof(tokens[4].c_str()) - droneOffset.Z;
+                    double newX = atof(tokens[3].c_str());
+                    double newY = atof(tokens[5].c_str());
+                    double newZ = posZ;
 
                     // find direction the drone needs to move
 
@@ -350,6 +361,11 @@ std_msgs::String StringToMsg(string input)
     ss << input;
     out.data = ss.str();
     return out;
+}
+
+void updatePosition(const tum_ardrone::filter_stateConstPtr statePtr)
+{
+    posZ = statePtr->z;
 }
 
 
